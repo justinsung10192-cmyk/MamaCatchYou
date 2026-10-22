@@ -1,0 +1,1140 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>深夜滑手機：躲避媽媽查房</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=DotGothic16&family=Noto+Sans+TC:wght@400;700;900&display=swap');
+
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden !important; /* 徹底關閉頁面滾動條 */
+            touch-action: manipulation; /* 允許正常點擊，禁止滑動與縮放 */
+        }
+
+        body {
+            font-family: 'Noto Sans TC', sans-serif;
+            background-color: #0b0f19;
+            color: #f3f4f6;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        .pixel-font {
+            font-family: 'DotGothic16', sans-serif;
+        }
+
+        /* Heartbeat Animation */
+        @keyframes heartbeat {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.18); }
+        }
+        .animate-heartbeat {
+            animation: heartbeat 0.6s infinite ease-in-out;
+        }
+
+        /* Scanline Overlay for Canvas */
+        .scanline-container::after {
+            content: " ";
+            display: block;
+            position: absolute;
+            top: 0; left: 0; bottom: 0; right: 0;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%);
+            background-size: 100% 4px;
+            z-index: 10;
+            pointer-events: none;
+            opacity: 0.4;
+            border-radius: 12px;
+        }
+    </style>
+</head>
+<body class="w-full h-full flex flex-col justify-between items-center p-2 sm:p-4 box-border overflow-hidden select-none">
+
+    <!-- Header / Navigation Bar -->
+    <header class="w-full max-w-4xl flex items-center justify-between px-2 py-1 shrink-0 z-10">
+        <div class="flex items-center space-x-2">
+            <i class="fa-solid fa-moon text-yellow-400 text-xl sm:text-2xl"></i>
+            <h1 class="text-base sm:text-2xl font-black tracking-wide text-transparent bg-clip-text bg-gradient-to-r from-yellow-300 via-amber-400 to-red-400">
+                深夜滑手機：躲避媽媽查房
+            </h1>
+        </div>
+        <div class="text-xs sm:text-sm bg-gray-800/80 px-3 py-1 rounded-full border border-gray-700 text-gray-300 flex items-center gap-1.5">
+            <i class="fa-solid fa-trophy text-amber-400"></i> 最高分: <span id="high-score-display" class="font-bold text-amber-300 pixel-font">0</span>
+        </div>
+    </header>
+
+    <!-- Main Game Container -->
+    <main class="w-full max-w-4xl flex-1 flex flex-col items-center justify-center min-h-0 my-1 relative overflow-hidden">
+        <!-- Canvas Screen Container -->
+        <div class="scanline-container w-full h-full max-h-[72vh] aspect-[16/9] bg-gray-950 rounded-xl overflow-hidden border-2 border-gray-800 shadow-2xl relative flex items-center justify-center">
+            
+            <!-- Canvas Element -->
+            <canvas id="gameCanvas" width="960" height="540" class="w-full h-full block object-contain"></canvas>
+
+            <!-- Heartbeat / Danger Warning Indicator (Overlay) -->
+            <div id="danger-overlay" class="absolute top-3 left-1/2 -translate-x-1/2 flex items-center gap-2 sm:gap-3 bg-red-950/85 border border-red-500/50 text-red-200 px-3 py-1 sm:px-4 sm:py-1.5 rounded-full backdrop-blur-md opacity-0 transition-opacity duration-300 pointer-events-none z-20">
+                <i id="heart-icon" class="fa-solid fa-heart text-red-500 text-base sm:text-xl animate-heartbeat"></i>
+                <span id="danger-text" class="font-bold text-xs sm:text-base pixel-font tracking-wider text-red-300">聽見腳步聲了...</span>
+            </div>
+
+            <!-- Clutch / Multiplier Floating Popup -->
+            <div id="multiplier-popup" class="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 text-center pointer-events-none opacity-0 transition-all duration-500 z-30 transform scale-75">
+                <div id="multiplier-title" class="text-xl sm:text-4xl font-black text-amber-300 drop-shadow-[0_4px_8px_rgba(0,0,0,0.9)] pixel-font">
+                    PERFECT CLUTCH!
+                </div>
+                <div id="multiplier-desc" class="text-xs sm:text-lg text-yellow-100 font-bold drop-shadow">
+                    極限壓線避開！得分 2.5 倍！
+                </div>
+            </div>
+
+            <!-- Start / Menu Modal Overlay -->
+            <div id="menu-overlay" class="absolute inset-0 bg-gray-950/95 backdrop-blur-md flex items-center justify-center p-3 text-center z-50 transition-opacity duration-300">
+                <div class="max-w-md w-full max-h-[90vh] bg-gray-900 border-2 border-amber-500/40 rounded-2xl p-4 sm:p-5 shadow-2xl flex flex-col justify-between overflow-y-auto">
+                    <div>
+                        <i class="fa-solid fa-mobile-screen-button text-3xl sm:text-4xl text-cyan-400 mb-1 animate-bounce"></i>
+                        <h2 class="text-lg sm:text-2xl font-black text-white mb-1.5">今晚又要偷偷滑手機！</h2>
+                        <p class="text-gray-300 text-xs sm:text-sm mb-3 leading-relaxed">
+                            媽媽隨時會過來開門查房。趁媽媽沒發現前，<strong class="text-cyan-300">多滑手機賺取高分</strong>！<br>
+                            聽見腳步聲或門把聲時，必須立刻選擇姿勢藏匿。
+                        </p>
+
+                        <div class="grid grid-cols-3 gap-2 mb-4 text-left text-[11px] sm:text-xs bg-gray-950/80 p-2 sm:p-2.5 rounded-xl border border-gray-800">
+                            <div class="p-1.5 rounded bg-gray-900 border border-cyan-500/30">
+                                <div class="font-bold text-cyan-300 mb-0.5"><i class="fa-solid fa-mattress-pillow"></i> 1. 塞枕頭</div>
+                                <span class="text-gray-400">速度：極快<br>風險：中等</span>
+                            </div>
+                            <div class="p-1.5 rounded bg-gray-900 border border-indigo-500/30">
+                                <div class="font-bold text-indigo-300 mb-0.5"><i class="fa-solid fa-bed"></i> 2. 蓋棉被</div>
+                                <span class="text-gray-400">速度：中等<br>隱蔽：極高</span>
+                            </div>
+                            <div class="p-1.5 rounded bg-gray-900 border border-amber-500/30">
+                                <div class="font-bold text-amber-300 mb-0.5"><i class="fa-solid fa-book-open"></i> 3. 假讀書</div>
+                                <span class="text-gray-400">速度：偏慢<br>獎勵：高倍率</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <button id="start-btn" type="button" class="w-full py-3 px-6 bg-gradient-to-r from-amber-500 to-red-600 hover:from-amber-400 hover:to-red-500 active:from-amber-600 active:to-red-700 text-white font-black text-base sm:text-lg rounded-xl shadow-lg hover:shadow-red-500/30 transition-all transform active:scale-95 flex items-center justify-center gap-2 cursor-pointer z-50 shrink-0">
+                        <i class="fa-solid fa-play"></i> 開始挑戰 Night 1
+                    </button>
+                </div>
+            </div>
+
+            <!-- Game Over / Night Summary Modal -->
+            <div id="gameover-overlay" class="absolute inset-0 bg-black/90 backdrop-blur-md flex items-center justify-center p-3 text-center z-50 hidden">
+                <div class="max-w-md w-full bg-gray-900 border-2 border-red-500/50 rounded-2xl p-4 sm:p-5 shadow-2xl relative">
+                    <div id="result-icon-container" class="w-12 h-12 sm:w-16 sm:h-16 rounded-full bg-red-950 border-2 border-red-500 flex items-center justify-center mx-auto mb-2">
+                        <i id="result-icon" class="fa-solid fa-eye text-2xl sm:text-3xl text-red-500"></i>
+                    </div>
+
+                    <h2 id="result-title" class="text-lg sm:text-2xl font-black text-red-400 mb-1">查房被抓包了！</h2>
+                    <p id="result-reason" class="text-gray-300 text-xs sm:text-sm mb-3 bg-red-950/40 p-2 rounded-lg border border-red-900/50">
+                        「深夜滑手機被當場抓包！」
+                    </p>
+
+                    <!-- Stats Card -->
+                    <div class="bg-gray-950/80 rounded-xl p-3 border border-gray-800 mb-4 space-y-1 text-xs sm:text-sm">
+                        <div class="flex justify-between items-center">
+                            <span class="text-gray-400">生存夜數：</span>
+                            <span id="res-night" class="font-bold text-yellow-400 pixel-font">Night 1</span>
+                        </div>
+                        <div class="flex justify-between items-center">
+                            <span class="text-gray-400">本次得分：</span>
+                            <span id="res-score" class="font-bold text-cyan-400 pixel-font">0</span>
+                        </div>
+                        <div class="flex justify-between items-center">
+                            <span class="text-gray-400">極限避開次數：</span>
+                            <span id="res-clutches" class="font-bold text-emerald-400 pixel-font">0</span>
+                        </div>
+                        <div class="flex justify-between items-center pt-1 border-t border-gray-800">
+                            <span class="text-gray-300 font-bold">綜合評級：</span>
+                            <span id="res-grade" class="font-black text-lg sm:text-xl text-amber-400 pixel-font">S</span>
+                        </div>
+                    </div>
+
+                    <button id="restart-btn" type="button" class="w-full py-2.5 px-6 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 active:from-cyan-700 active:to-blue-700 text-white font-bold text-sm sm:text-base rounded-xl shadow-lg transition-all active:scale-95 flex items-center justify-center gap-2 cursor-pointer">
+                        <i class="fa-solid fa-rotate-right"></i> 重新開始挑戰
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Controls HUD Bar -->
+        <div class="w-full mt-2 bg-gray-900 border border-gray-800 rounded-xl p-2 sm:p-2.5 shadow-xl shrink-0 z-10">
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                <!-- Action: Scroll Phone -->
+                <button id="btn-scroll" type="button" class="col-span-2 sm:col-span-1 py-2 sm:py-2.5 px-3 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 active:bg-cyan-700 text-white font-bold rounded-xl shadow-lg flex flex-col items-center justify-center transition-transform active:scale-95 select-none cursor-pointer">
+                    <span class="text-xs sm:text-sm flex items-center gap-1.5">
+                        <i class="fa-solid fa-mobile-button"></i> 滑手機
+                    </span>
+                    <span class="text-[10px] text-cyan-200 opacity-80">[按住/空白鍵] 賺積分</span>
+                </button>
+
+                <!-- Hide Action 1: Pillow -->
+                <button id="btn-hide-pillow" type="button" class="py-2 px-1.5 bg-gray-800 hover:bg-gray-700 active:bg-gray-800 text-gray-200 border border-gray-700 hover:border-cyan-400 rounded-xl flex flex-col items-center justify-center transition-all active:scale-95 cursor-pointer">
+                    <span class="text-xs sm:text-sm font-bold text-cyan-300 flex items-center gap-1">
+                        <i class="fa-solid fa-mattress-pillow"></i> 1. 塞枕頭
+                    </span>
+                    <span class="text-[10px] text-gray-400">[按 1] 極快</span>
+                </button>
+
+                <!-- Hide Action 2: Sleep -->
+                <button id="btn-hide-sleep" type="button" class="py-2 px-1.5 bg-gray-800 hover:bg-gray-700 active:bg-gray-800 text-gray-200 border border-gray-700 hover:border-indigo-400 rounded-xl flex flex-col items-center justify-center transition-all active:scale-95 cursor-pointer">
+                    <span class="text-xs sm:text-sm font-bold text-indigo-300 flex items-center gap-1">
+                        <i class="fa-solid fa-bed"></i> 2. 蓋棉被
+                    </span>
+                    <span class="text-[10px] text-gray-400">[按 2] 穩健</span>
+                </button>
+
+                <!-- Hide Action 3: Study -->
+                <button id="btn-hide-study" type="button" class="py-2 px-1.5 bg-gray-800 hover:bg-gray-700 active:bg-gray-800 text-gray-200 border border-gray-700 hover:border-amber-400 rounded-xl flex flex-col items-center justify-center transition-all active:scale-95 cursor-pointer">
+                    <span class="text-xs sm:text-sm font-bold text-amber-300 flex items-center gap-1">
+                        <i class="fa-solid fa-book-open"></i> 3. 假讀書
+                    </span>
+                    <span class="text-[10px] text-gray-400">[按 3] 高加成</span>
+                </button>
+            </div>
+        </div>
+    </main>
+
+    <!-- Sound & Logic Script -->
+    <script>
+        /**
+         * Web Audio Synthesizer Engine
+         */
+        class SoundEngine {
+            constructor() {
+                this.ctx = null;
+            }
+
+            init() {
+                try {
+                    if (!this.ctx) {
+                        const AudioContext = window.AudioContext || window.webkitAudioContext;
+                        this.ctx = new AudioContext();
+                    }
+                    if (this.ctx && this.ctx.state === 'suspended') {
+                        this.ctx.resume();
+                    }
+                } catch (e) {
+                    console.log('Audio init prevented:', e);
+                }
+            }
+
+            playFootstep() {
+                if (!this.ctx || this.ctx.state !== 'running') return;
+                const now = this.ctx.currentTime;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(90, now);
+                osc.frequency.exponentialRampToValueAtTime(30, now + 0.15);
+
+                gain.gain.setValueAtTime(0.3, now);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start(now);
+                osc.stop(now + 0.15);
+            }
+
+            playHandleClick() {
+                if (!this.ctx || this.ctx.state !== 'running') return;
+                const now = this.ctx.currentTime;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(1200, now);
+                osc.frequency.exponentialRampToValueAtTime(300, now + 0.08);
+
+                gain.gain.setValueAtTime(0.2, now);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
+
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start(now);
+                osc.stop(now + 0.08);
+            }
+
+            playHeartbeat() {
+                if (!this.ctx || this.ctx.state !== 'running') return;
+                const now = this.ctx.currentTime;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(65, now);
+                osc.frequency.exponentialRampToValueAtTime(35, now + 0.12);
+
+                gain.gain.setValueAtTime(0.5, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.12);
+
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start(now);
+                osc.stop(now + 0.12);
+            }
+
+            playScrollTick() {
+                if (!this.ctx || this.ctx.state !== 'running') return;
+                const now = this.ctx.currentTime;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(800 + Math.random() * 400, now);
+
+                gain.gain.setValueAtTime(0.02, now);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.03);
+
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start(now);
+                osc.stop(now + 0.03);
+            }
+
+            playDoorOpen() {
+                if (!this.ctx || this.ctx.state !== 'running') return;
+                const now = this.ctx.currentTime;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(200, now);
+                osc.frequency.linearRampToValueAtTime(500, now + 0.25);
+
+                gain.gain.setValueAtTime(0.25, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.25);
+
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start(now);
+                osc.stop(now + 0.25);
+            }
+
+            playCaught() {
+                if (!this.ctx || this.ctx.state !== 'running') return;
+                const now = this.ctx.currentTime;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(800, now);
+                osc.frequency.linearRampToValueAtTime(300, now + 0.4);
+
+                gain.gain.setValueAtTime(0.5, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.4);
+
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start(now);
+                osc.stop(now + 0.4);
+            }
+
+            playSuccess() {
+                if (!this.ctx || this.ctx.state !== 'running') return;
+                const now = this.ctx.currentTime;
+                const notes = [523.25, 659.25, 783.99, 1046.50];
+
+                notes.forEach((freq, idx) => {
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+                    osc.type = 'triangle';
+                    osc.frequency.setValueAtTime(freq, now + idx * 0.06);
+
+                    gain.gain.setValueAtTime(0.12, now + idx * 0.06);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.06 + 0.2);
+
+                    osc.connect(gain);
+                    gain.connect(this.ctx.destination);
+                    osc.start(now + idx * 0.06);
+                    osc.stop(now + idx * 0.06 + 0.2);
+                });
+            }
+        }
+
+        const sound = new SoundEngine();
+
+        /**
+         * Game States & Core Constants
+         */
+        const STATE = {
+            MENU: 'MENU',
+            PLAYING: 'PLAYING',
+            MOM_CHECK: 'MOM_CHECK',
+            GAME_OVER: 'GAME_OVER'
+        };
+
+        const ACTION = {
+            IDLE: 'IDLE',
+            SCROLLING: 'SCROLLING',
+            HIDE_PILLOW: 'HIDE_PILLOW',
+            HIDE_SLEEP: 'HIDE_SLEEP',
+            HIDE_STUDY: 'HIDE_STUDY'
+        };
+
+        const MOM_STAGE = {
+            SAFE: 0,
+            FOOTSTEPS: 1,
+            HANDLE_WIGGLE: 2,
+            DOOR_OPEN: 3
+        };
+
+        // DOM Element references
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        const menuOverlay = document.getElementById('menu-overlay');
+        const gameoverOverlay = document.getElementById('gameover-overlay');
+        const dangerOverlay = document.getElementById('danger-overlay');
+        const dangerText = document.getElementById('danger-text');
+        const multiplierPopup = document.getElementById('multiplier-popup');
+        const multiplierTitle = document.getElementById('multiplier-title');
+        const multiplierDesc = document.getElementById('multiplier-desc');
+        const highScoreDisplay = document.getElementById('high-score-display');
+
+        const startBtn = document.getElementById('start-btn');
+        const restartBtn = document.getElementById('restart-btn');
+        const btnScroll = document.getElementById('btn-scroll');
+        const btnHidePillow = document.getElementById('btn-hide-pillow');
+        const btnHideSleep = document.getElementById('btn-hide-sleep');
+        const btnHideStudy = document.getElementById('btn-hide-study');
+
+        let highScore = parseInt(localStorage.getItem('mom_dodge_highscore') || '0', 10);
+        highScoreDisplay.textContent = highScore.toLocaleString();
+
+        class Game {
+            constructor() {
+                this.state = STATE.MENU;
+                this.night = 1;
+                this.score = 0;
+                this.clutchCount = 0;
+                this.playerAction = ACTION.IDLE;
+                this.actionProgress = 1.0;
+                
+                this.momStage = MOM_STAGE.SAFE;
+                this.nextCheckTimer = 0;
+                this.stageTimer = 0;
+                this.doorOpenDuration = 0;
+                this.hideTimestamp = 0;
+                this.momOpenTimestamp = 0;
+
+                this.footstepDuration = 2.8;
+                this.handleDuration = 1.6;
+                
+                this.stars = [];
+                this.lastTime = performance.now();
+                this.heartbeatTimer = 0;
+                this.isScrollingHeld = false;
+
+                this.initStars();
+            }
+
+            initStars() {
+                this.stars = [];
+                for (let i = 0; i < 35; i++) {
+                    this.stars.push({
+                        x: 60 + Math.random() * 220,
+                        y: 40 + Math.random() * 120,
+                        size: Math.random() * 2 + 1,
+                        alpha: Math.random() * 0.8 + 0.2,
+                        speed: Math.random() * 0.02 + 0.005
+                    });
+                }
+            }
+
+            startNewGame() {
+                this.state = STATE.PLAYING;
+                this.night = 1;
+                this.score = 0;
+                this.clutchCount = 0;
+                this.playerAction = ACTION.IDLE;
+                this.actionProgress = 1.0;
+                this.scheduleNextMomCheck();
+                
+                menuOverlay.classList.add('opacity-0', 'pointer-events-none');
+                setTimeout(() => menuOverlay.classList.add('hidden'), 300);
+                gameoverOverlay.classList.add('hidden');
+            }
+
+            nextNight() {
+                this.night++;
+                sound.playSuccess();
+                this.scheduleNextMomCheck();
+            }
+
+            scheduleNextMomCheck() {
+                this.momStage = MOM_STAGE.SAFE;
+                const minWait = Math.max(3.5, 9 - this.night * 1.1);
+                const maxWait = Math.max(7, 15 - this.night * 1.3);
+                this.nextCheckTimer = minWait + Math.random() * (maxWait - minWait);
+
+                this.footstepDuration = Math.max(1.3, 2.8 - this.night * 0.25);
+                this.handleDuration = Math.max(0.8, 1.6 - this.night * 0.15);
+            }
+
+            triggerMomCheckStage1() {
+                this.momStage = MOM_STAGE.FOOTSTEPS;
+                this.stageTimer = this.footstepDuration;
+                dangerOverlay.classList.remove('opacity-0');
+                dangerText.textContent = "聽見門外腳步聲了...";
+                sound.playFootstep();
+            }
+
+            triggerMomCheckStage2() {
+                this.momStage = MOM_STAGE.HANDLE_WIGGLE;
+                this.stageTimer = this.handleDuration;
+                dangerText.textContent = "門把在發出聲音！快藏起來！";
+                sound.playHandleClick();
+            }
+
+            triggerMomCheckStage3() {
+                this.momStage = MOM_STAGE.DOOR_OPEN;
+                this.doorOpenDuration = 1.8 + Math.random() * 0.6;
+                this.momOpenTimestamp = performance.now();
+                sound.playDoorOpen();
+                this.evaluateMomInspection();
+            }
+
+            setAction(newAction) {
+                if (this.state !== STATE.PLAYING && this.state !== STATE.MOM_CHECK) return;
+                if (this.playerAction === newAction) return;
+
+                this.playerAction = newAction;
+                this.actionProgress = 0.0;
+
+                if (newAction !== ACTION.SCROLLING && newAction !== ACTION.IDLE) {
+                    this.hideTimestamp = performance.now();
+                }
+            }
+
+            update(dt) {
+                this.stars.forEach(s => {
+                    s.alpha += s.speed;
+                    if (s.alpha > 1 || s.alpha < 0.2) s.speed = -s.speed;
+                });
+
+                if (this.state !== STATE.PLAYING && this.state !== STATE.MOM_CHECK) return;
+
+                if (this.actionProgress < 1.0) {
+                    let speed = 4.0;
+                    if (this.playerAction === ACTION.HIDE_PILLOW) speed = 8.0;
+                    else if (this.playerAction === ACTION.HIDE_SLEEP) speed = 3.5;
+                    else if (this.playerAction === ACTION.HIDE_STUDY) speed = 2.2;
+                    
+                    this.actionProgress = Math.min(1.0, this.actionProgress + dt * speed);
+                }
+
+                if (this.playerAction === ACTION.SCROLLING) {
+                    const pointsPerSec = 120 * (1 + (this.night - 1) * 0.45);
+                    this.score += pointsPerSec * dt;
+                    if (Math.random() < 0.2) sound.playScrollTick();
+                }
+
+                if (this.momStage === MOM_STAGE.SAFE) {
+                    this.nextCheckTimer -= dt;
+                    if (this.nextCheckTimer <= 0) {
+                        this.triggerMomCheckStage1();
+                    }
+                } else if (this.momStage === MOM_STAGE.FOOTSTEPS) {
+                    this.stageTimer -= dt;
+                    this.heartbeatTimer += dt;
+                    if (this.heartbeatTimer >= 0.8) {
+                        sound.playFootstep();
+                        this.heartbeatTimer = 0;
+                    }
+                    if (this.stageTimer <= 0) {
+                        this.triggerMomCheckStage2();
+                    }
+                } else if (this.momStage === MOM_STAGE.HANDLE_WIGGLE) {
+                    this.stageTimer -= dt;
+                    this.heartbeatTimer += dt;
+                    if (this.heartbeatTimer >= 0.4) {
+                        sound.playHeartbeat();
+                        this.heartbeatTimer = 0;
+                    }
+                    if (this.stageTimer <= 0) {
+                        this.triggerMomCheckStage3();
+                    }
+                } else if (this.momStage === MOM_STAGE.DOOR_OPEN) {
+                    this.doorOpenDuration -= dt;
+                    if (this.playerAction === ACTION.SCROLLING) {
+                        this.triggerGameOver("深夜滑手機被媽媽當場逮個正著！");
+                        return;
+                    }
+
+                    if (this.doorOpenDuration <= 0) {
+                        this.momStage = MOM_STAGE.SAFE;
+                        dangerOverlay.classList.add('opacity-0');
+                        this.calculateClutchAndScore();
+                        this.nextNight();
+                    }
+                }
+            }
+
+            evaluateMomInspection() {
+                if (this.playerAction === ACTION.SCROLLING) {
+                    this.triggerGameOver("深夜滑手機被媽媽當場抓包！螢幕太亮了！");
+                    return;
+                }
+
+                if (this.playerAction === ACTION.IDLE) {
+                    this.triggerGameOver("拿著手機呆坐在床上，被媽媽一眼看穿！");
+                    return;
+                }
+
+                if (this.actionProgress < 0.85) {
+                    this.triggerGameOver("手腳太慢！藏手機的慌張動作被媽媽發現！");
+                    return;
+                }
+
+                if (this.playerAction === ACTION.HIDE_PILLOW) {
+                    const timeDiff = (performance.now() - this.hideTimestamp) / 1000;
+                    if (timeDiff < 0.25 && Math.random() < 0.15) {
+                        this.triggerGameOver("枕頭底下凸了一塊，手機光芒露出破綻！");
+                        return;
+                    }
+                }
+            }
+
+            calculateClutchAndScore() {
+                const delayInSec = Math.max(0, (this.momOpenTimestamp - this.hideTimestamp) / 1000);
+                let multiplier = 1.0;
+                let title = "";
+                let desc = "";
+
+                if (delayInSec < 0.6) {
+                    multiplier = 3.0;
+                    title = "⚡ 極限神閃避 (3.0x)";
+                    desc = "開門前 0.5 秒完美藏好！獲得超高積分！";
+                    this.clutchCount++;
+                } else if (delayInSec < 1.4) {
+                    multiplier = 1.8;
+                    title = "✨ 壓線成功 (1.8x)";
+                    desc = "抓準時機避開查房！得分加成！";
+                } else {
+                    multiplier = 1.0;
+                    title = "🛡️ 安全過關 (1.0x)";
+                    desc = "太早藏好，沒有獲得極限加成！";
+                }
+
+                if (this.playerAction === ACTION.HIDE_STUDY) {
+                    multiplier += 0.5;
+                    title += " + 讀書加成";
+                }
+
+                const bonusPoints = Math.round(500 * multiplier * this.night);
+                this.score += bonusPoints;
+
+                if (multiplier > 1.2) {
+                    multiplierTitle.textContent = title;
+                    multiplierDesc.textContent = desc;
+                    multiplierPopup.classList.remove('opacity-0', 'scale-75');
+                    multiplierPopup.classList.add('opacity-100', 'scale-100');
+                    setTimeout(() => {
+                        multiplierPopup.classList.remove('opacity-100', 'scale-100');
+                        multiplierPopup.classList.add('opacity-0', 'scale-75');
+                    }, 2000);
+                }
+            }
+
+            triggerGameOver(reason) {
+                this.state = STATE.GAME_OVER;
+                dangerOverlay.classList.add('opacity-0');
+                sound.playCaught();
+
+                const finalScore = Math.floor(this.score);
+                if (finalScore > highScore) {
+                    highScore = finalScore;
+                    localStorage.setItem('mom_dodge_highscore', highScore.toString());
+                    highScoreDisplay.textContent = highScore.toLocaleString();
+                }
+
+                let grade = 'D';
+                if (finalScore >= 12000) grade = 'S';
+                else if (finalScore >= 6000) grade = 'A';
+                else if (finalScore >= 3000) grade = 'B';
+                else if (finalScore >= 1000) grade = 'C';
+
+                document.getElementById('result-reason').textContent = `「${reason}」`;
+                document.getElementById('res-night').textContent = `Night ${this.night}`;
+                document.getElementById('res-score').textContent = finalScore.toLocaleString();
+                document.getElementById('res-clutches').textContent = this.clutchCount;
+                document.getElementById('res-grade').textContent = grade;
+
+                gameoverOverlay.classList.remove('hidden');
+            }
+        }
+
+        const game = new Game();
+
+        /**
+         * Canvas Rendering Pipeline
+         */
+        function render() {
+            ctx.fillStyle = '#0b0f19';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            drawRoomBackground();
+            drawWindow();
+            drawFurniture();
+            drawDoorAndMom();
+            drawProtagonist();
+            drawLightingEffects();
+            drawHUD();
+        }
+
+        function drawRoomBackground() {
+            const wallGrad = ctx.createLinearGradient(0, 0, 0, 380);
+            wallGrad.addColorStop(0, '#0f172a');
+            wallGrad.addColorStop(1, '#1e1b4b');
+            ctx.fillStyle = wallGrad;
+            ctx.fillRect(0, 0, canvas.width, 380);
+
+            const floorGrad = ctx.createLinearGradient(0, 380, 0, 540);
+            floorGrad.addColorStop(0, '#111827');
+            floorGrad.addColorStop(1, '#030712');
+            ctx.fillStyle = floorGrad;
+            ctx.fillRect(0, 380, canvas.width, 160);
+
+            ctx.strokeStyle = '#374151';
+            ctx.lineWidth = 4;
+            ctx.beginPath();
+            ctx.moveTo(0, 380);
+            ctx.lineTo(canvas.width, 380);
+            ctx.stroke();
+        }
+
+        function drawWindow() {
+            ctx.save();
+            const wx = 120, wy = 60, ww = 180, wh = 140;
+
+            ctx.fillStyle = '#020617';
+            ctx.fillRect(wx, wy, ww, wh);
+
+            game.stars.forEach(s => {
+                ctx.fillStyle = `rgba(255, 255, 255, ${s.alpha})`;
+                ctx.beginPath();
+                ctx.arc(s.x, s.y, s.size, 0, Math.PI * 2);
+                ctx.fill();
+            });
+
+            ctx.fillStyle = '#fef08a';
+            ctx.beginPath();
+            ctx.arc(wx + 130, wy + 40, 22, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.strokeStyle = '#334155';
+            ctx.lineWidth = 6;
+            ctx.strokeRect(wx, wy, ww, wh);
+            ctx.beginPath();
+            ctx.moveTo(wx + ww / 2, wy);
+            ctx.lineTo(wx + ww / 2, wy + wh);
+            ctx.moveTo(wx, wy + wh / 2);
+            ctx.lineTo(wx + ww, wy + wh / 2);
+            ctx.stroke();
+
+            ctx.restore();
+        }
+
+        function drawFurniture() {
+            ctx.fillStyle = '#1e293b';
+            ctx.fillRect(40, 320, 160, 110);
+            ctx.fillStyle = '#334155';
+            ctx.fillRect(30, 310, 180, 15);
+
+            ctx.fillStyle = '#ef4444';
+            ctx.fillRect(50, 285, 25, 25);
+            ctx.fillStyle = '#3b82f6';
+            ctx.fillRect(80, 275, 30, 35);
+
+            ctx.strokeStyle = '#64748b';
+            ctx.lineWidth = 4;
+            ctx.beginPath();
+            ctx.moveTo(170, 310);
+            ctx.lineTo(170, 260);
+            ctx.lineTo(150, 250);
+            ctx.stroke();
+
+            ctx.fillStyle = '#f59e0b';
+            ctx.beginPath();
+            ctx.arc(145, 250, 12, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.fillStyle = '#334155';
+            ctx.fillRect(820, 260, 30, 140);
+
+            ctx.fillStyle = '#475569';
+            ctx.fillRect(520, 340, 310, 50);
+
+            ctx.fillStyle = '#e2e8f0';
+            ctx.beginPath();
+            ctx.roundRect(750, 320, 70, 30, 10);
+            ctx.fill();
+
+            ctx.fillStyle = '#1e3a8a';
+            ctx.beginPath();
+            ctx.roundRect(520, 350, 240, 45, 8);
+            ctx.fill();
+            ctx.strokeStyle = '#3b82f6';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+        }
+
+        function drawDoorAndMom() {
+            const dx = 380, dy = 130, dw = 110, dh = 250;
+
+            ctx.fillStyle = '#1f2937';
+            ctx.fillRect(dx - 6, dy - 6, dw + 12, dh + 6);
+
+            if (game.momStage === MOM_STAGE.DOOR_OPEN) {
+                ctx.save();
+                
+                const lightGrad = ctx.createLinearGradient(dx, dy, dx + 200, 540);
+                lightGrad.addColorStop(0, 'rgba(254, 240, 138, 0.95)');
+                lightGrad.addColorStop(1, 'rgba(254, 240, 138, 0.05)');
+
+                ctx.fillStyle = lightGrad;
+                ctx.beginPath();
+                ctx.moveTo(dx, dy);
+                ctx.lineTo(dx + dw, dy);
+                ctx.lineTo(dx + dw + 220, 540);
+                ctx.lineTo(dx - 120, 540);
+                ctx.closePath();
+                ctx.fill();
+
+                ctx.fillStyle = '#111827';
+                ctx.fillRect(dx - 45, dy, 45, dh);
+
+                ctx.fillStyle = '#090d16';
+                ctx.beginPath();
+                ctx.arc(dx + dw / 2, dy + 65, 22, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.beginPath();
+                ctx.moveTo(dx + dw / 2 - 25, dy + 210);
+                ctx.lineTo(dx + dw / 2 - 15, dy + 90);
+                ctx.lineTo(dx + dw / 2 + 15, dy + 90);
+                ctx.lineTo(dx + dw / 2 + 25, dy + 210);
+                ctx.closePath();
+                ctx.fill();
+
+                if (game.state === STATE.GAME_OVER) {
+                    ctx.fillStyle = '#ef4444';
+                    ctx.shadowColor = '#ef4444';
+                    ctx.shadowBlur = 10;
+                    ctx.beginPath();
+                    ctx.arc(dx + dw / 2 - 7, dy + 62, 3.5, 0, Math.PI * 2);
+                    ctx.arc(dx + dw / 2 + 7, dy + 62, 3.5, 0, Math.PI * 2);
+                    ctx.fill();
+
+                    ctx.strokeStyle = '#ef4444';
+                    ctx.lineWidth = 3;
+                    ctx.beginPath();
+                    ctx.moveTo(dx + dw / 2 + 20, dy + 35);
+                    ctx.lineTo(dx + dw / 2 + 32, dy + 45);
+                    ctx.stroke();
+                }
+
+                ctx.restore();
+            } else {
+                ctx.fillStyle = '#374151';
+                ctx.fillRect(dx, dy, dw, dh);
+
+                ctx.strokeStyle = '#1f2937';
+                ctx.lineWidth = 3;
+                ctx.strokeRect(dx + 15, dy + 20, dw - 30, 90);
+                ctx.strokeRect(dx + 15, dy + 130, dw - 30, 100);
+
+                const handleY = dy + dh / 2 + (game.momStage === MOM_STAGE.HANDLE_WIGGLE ? (Math.random() * 4 - 2) : 0);
+                ctx.fillStyle = '#f59e0b';
+                ctx.beginPath();
+                ctx.arc(dx + 18, handleY, 6, 0, Math.PI * 2);
+                ctx.fill();
+
+                if (game.momStage === MOM_STAGE.FOOTSTEPS || game.momStage === MOM_STAGE.HANDLE_WIGGLE) {
+                    ctx.fillStyle = 'rgba(239, 68, 68, 0.3)';
+                    ctx.fillRect(dx, dy + dh - 4, dw, 4);
+                }
+            }
+        }
+
+        function drawProtagonist() {
+            ctx.save();
+
+            if (game.playerAction === ACTION.HIDE_STUDY) {
+                const charX = 110, charY = 320;
+                ctx.fillStyle = '#475569';
+                ctx.fillRect(100, 340, 35, 70);
+
+                ctx.fillStyle = '#38bdf8';
+                ctx.beginPath();
+                ctx.roundRect(charX - 12, charY - 30, 24, 40, 6);
+                ctx.fill();
+
+                ctx.fillStyle = '#fde047';
+                ctx.beginPath();
+                ctx.arc(charX + 5, charY - 45, 14, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.strokeStyle = '#f59e0b';
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.moveTo(charX + 10, charY - 10);
+                ctx.lineTo(charX + 30, charY + 2);
+                ctx.stroke();
+
+            } else if (game.playerAction === ACTION.HIDE_SLEEP) {
+                ctx.fillStyle = '#1e3a8a';
+                ctx.beginPath();
+                ctx.roundRect(650, 325, 180, 60, 12);
+                ctx.fill();
+
+                ctx.fillStyle = '#fde047';
+                ctx.beginPath();
+                ctx.arc(800, 332, 12, 0, Math.PI * 2);
+                ctx.fill();
+
+                const time = performance.now() * 0.003;
+                ctx.fillStyle = '#93c5fd';
+                ctx.font = 'bold 16px sans-serif';
+                ctx.fillText('Z', 780 + Math.sin(time) * 5, 310 - (time * 20 % 30));
+
+            } else if (game.playerAction === ACTION.HIDE_PILLOW) {
+                const bx = 740, by = 325;
+                ctx.fillStyle = '#38bdf8';
+                ctx.beginPath();
+                ctx.roundRect(bx - 15, by - 10, 30, 45, 8);
+                ctx.fill();
+
+                ctx.fillStyle = '#fde047';
+                ctx.beginPath();
+                ctx.arc(bx, by - 25, 15, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.strokeStyle = '#fca5a5';
+                ctx.lineWidth = 5;
+                ctx.beginPath();
+                ctx.moveTo(bx + 5, by);
+                ctx.lineTo(bx + 45, by + 5);
+                ctx.stroke();
+
+            } else {
+                const bx = 710, by = 320;
+                ctx.fillStyle = '#38bdf8';
+                ctx.beginPath();
+                ctx.roundRect(bx - 18, by - 20, 36, 50, 10);
+                ctx.fill();
+
+                ctx.fillStyle = '#fde047';
+                ctx.beginPath();
+                ctx.arc(bx - 5, by - 35, 16, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.strokeStyle = '#fca5a5';
+                ctx.lineWidth = 5;
+                ctx.beginPath();
+                ctx.moveTo(bx - 10, by - 5);
+                ctx.lineTo(bx - 22, by + 12);
+                ctx.stroke();
+
+                if (game.playerAction === ACTION.SCROLLING) {
+                    ctx.fillStyle = '#0f172a';
+                    ctx.fillRect(bx - 32, by + 2, 14, 22);
+
+                    ctx.fillStyle = '#38bdf8';
+                    ctx.fillRect(bx - 30, by + 4, 10, 18);
+                }
+            }
+
+            ctx.restore();
+        }
+
+        function drawLightingEffects() {
+            if (game.playerAction === ACTION.HIDE_STUDY) {
+                ctx.save();
+                const lampGrad = ctx.createRadialGradient(145, 250, 10, 145, 290, 140);
+                lampGrad.addColorStop(0, 'rgba(251, 191, 36, 0.45)');
+                lampGrad.addColorStop(1, 'rgba(251, 191, 36, 0)');
+
+                ctx.fillStyle = lampGrad;
+                ctx.beginPath();
+                ctx.moveTo(145, 250);
+                ctx.lineTo(60, 420);
+                ctx.lineTo(230, 420);
+                ctx.closePath();
+                ctx.fill();
+                ctx.restore();
+            }
+
+            if (game.playerAction === ACTION.SCROLLING) {
+                ctx.save();
+                const phoneGrad = ctx.createRadialGradient(680, 330, 5, 680, 310, 90);
+                phoneGrad.addColorStop(0, 'rgba(56, 189, 248, 0.55)');
+                phoneGrad.addColorStop(1, 'rgba(56, 189, 248, 0)');
+
+                ctx.fillStyle = phoneGrad;
+                ctx.beginPath();
+                ctx.arc(680, 310, 90, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+            }
+        }
+
+        function drawHUD() {
+            if (game.state !== STATE.PLAYING && game.state !== STATE.MOM_CHECK) return;
+
+            ctx.save();
+            ctx.fillStyle = 'rgba(15, 23, 42, 0.75)';
+            ctx.beginPath();
+            ctx.roundRect(16, 16, 220, 60, 12);
+            ctx.fill();
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+            ctx.lineWidth = 1.5;
+            ctx.stroke();
+
+            ctx.fillStyle = '#f59e0b';
+            ctx.font = 'bold 14px "DotGothic16", sans-serif';
+            ctx.fillText(`NIGHT ${game.night}`, 30, 38);
+
+            ctx.fillStyle = '#38bdf8';
+            ctx.font = 'bold 20px "DotGothic16", sans-serif';
+            ctx.fillText(`分數: ${Math.floor(game.score).toLocaleString()}`, 30, 62);
+
+            let statusText = "狀態: 偷滑手機中";
+            let statusColor = "#38bdf8";
+
+            if (game.playerAction === ACTION.HIDE_PILLOW) {
+                statusText = "狀態: 塞枕頭底下";
+                statusColor = "#67e8f9";
+            } else if (game.playerAction === ACTION.HIDE_SLEEP) {
+                statusText = "狀態: 蓋棉被裝睡";
+                statusColor = "#818cf8";
+            } else if (game.playerAction === ACTION.HIDE_STUDY) {
+                statusText = "狀態: 假裝讀書";
+                statusColor = "#fbbf24";
+            } else if (game.playerAction === ACTION.IDLE) {
+                statusText = "狀態: 呆坐發呆";
+                statusColor = "#9ca3af";
+            }
+
+            ctx.fillStyle = 'rgba(15, 23, 42, 0.75)';
+            ctx.beginPath();
+            ctx.roundRect(canvas.width - 200, 16, 180, 40, 10);
+            ctx.fill();
+
+            ctx.fillStyle = statusColor;
+            ctx.font = 'bold 14px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText(statusText, canvas.width - 110, 41);
+
+            ctx.restore();
+        }
+
+        function gameLoop(now) {
+            const dt = Math.min(0.1, (now - game.lastTime) / 1000);
+            game.lastTime = now;
+
+            game.update(dt);
+            render();
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        function setupEventListeners() {
+            const unlockAudio = () => sound.init();
+
+            startBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                unlockAudio();
+                game.startNewGame();
+            });
+
+            restartBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                unlockAudio();
+                game.startNewGame();
+            });
+
+            const startScrolling = (e) => {
+                if (e) e.preventDefault();
+                unlockAudio();
+                game.isScrollingHeld = true;
+                game.setAction(ACTION.SCROLLING);
+            };
+
+            const stopScrolling = (e) => {
+                if (e) e.preventDefault();
+                if (game.isScrollingHeld) {
+                    game.isScrollingHeld = false;
+                    if (game.playerAction === ACTION.SCROLLING) {
+                        game.setAction(ACTION.IDLE);
+                    }
+                }
+            };
+
+            btnScroll.addEventListener('pointerdown', startScrolling);
+            btnScroll.addEventListener('pointerup', stopScrolling);
+            btnScroll.addEventListener('pointercancel', stopScrolling);
+
+            btnHidePillow.addEventListener('click', (e) => {
+                e.preventDefault();
+                unlockAudio();
+                game.isScrollingHeld = false;
+                game.setAction(ACTION.HIDE_PILLOW);
+            });
+
+            btnHideSleep.addEventListener('click', (e) => {
+                e.preventDefault();
+                unlockAudio();
+                game.isScrollingHeld = false;
+                game.setAction(ACTION.HIDE_SLEEP);
+            });
+
+            btnHideStudy.addEventListener('click', (e) => {
+                e.preventDefault();
+                unlockAudio();
+                game.isScrollingHeld = false;
+                game.setAction(ACTION.HIDE_STUDY);
+            });
+
+            window.addEventListener('keydown', (e) => {
+                if (e.repeat) return;
+                unlockAudio();
+
+                if (e.code === 'Space') {
+                    e.preventDefault();
+                    startScrolling();
+                } else if (e.key === '1') {
+                    game.isScrollingHeld = false;
+                    game.setAction(ACTION.HIDE_PILLOW);
+                } else if (e.key === '2') {
+                    game.isScrollingHeld = false;
+                    game.setAction(ACTION.HIDE_SLEEP);
+                } else if (e.key === '3') {
+                    game.isScrollingHeld = false;
+                    game.setAction(ACTION.HIDE_STUDY);
+                }
+            });
+
+            window.addEventListener('keyup', (e) => {
+                if (e.code === 'Space') {
+                    stopScrolling();
+                }
+            });
+        }
+
+        window.onload = function() {
+            setupEventListeners();
+            requestAnimationFrame(gameLoop);
+        };
+    </script>
+</body>
+</html>
